@@ -2,7 +2,6 @@
 
 import {
   Contract,
-  SorobanRpc,
   TransactionBuilder,
   Networks,
   BASE_FEE,
@@ -11,17 +10,20 @@ import {
   nativeToScVal,
   scValToNative,
 } from "@stellar/stellar-sdk";
+import {
+  Server as SorobanServer,
+  Api as SorobanApi,
+  assembleTransaction,
+} from "@stellar/stellar-sdk/rpc";
 import { signStellarTransaction, STELLAR_NETWORKS } from "./freighter";
 
 const CONTRACT_ID = process.env.NEXT_PUBLIC_CONTRACT_ID || "";
 const NETWORK = STELLAR_NETWORKS.TESTNET;
 
-// ─── Soroban RPC Client ───────────────────────────────────────────────────── //
 function getRpcServer() {
-  return new SorobanRpc.Server(NETWORK.rpcUrl, { allowHttp: false });
+  return new SorobanServer(NETWORK.rpcUrl);
 }
 
-// ─── Build + Sign + Send ──────────────────────────────────────────────────── //
 async function invokeContract(
   caller: string,
   method: string,
@@ -39,37 +41,29 @@ async function invokeContract(
     .setTimeout(30)
     .build();
 
-  // Simulate first
   const sim = await server.simulateTransaction(tx);
-  if (SorobanRpc.Api.isSimulationError(sim)) {
-    throw new Error(`Simulation failed: ${sim.error}`);
+  if (SorobanApi.isSimulationError(sim)) {
+    throw new Error(`Simulation failed: ${(sim as SorobanApi.SimulateTransactionErrorResponse).error}`);
   }
 
-  // Assemble transaction with soroban data
-  const preparedTx = SorobanRpc.assembleTransaction(tx, sim).build();
-  const txXdr = preparedTx.toXDR();
-
-  // Sign with Freighter
+  const preparedTx = assembleTransaction(tx, sim).build();
   const { signedXdr, error } = await signStellarTransaction(
-    txXdr,
+    preparedTx.toXDR(),
     Networks.TESTNET
   );
   if (error) throw new Error(error);
 
-  // Submit
   const sendResult = await server.sendTransaction(
     TransactionBuilder.fromXDR(signedXdr, Networks.TESTNET)
   );
-
   if (sendResult.status === "ERROR") {
-    throw new Error(`Transaction failed: ${sendResult.errorResult}`);
+    throw new Error(`Transaction failed: ${JSON.stringify(sendResult.errorResult)}`);
   }
 
-  // Poll for result
   let getResult = await server.getTransaction(sendResult.hash);
   let attempts = 0;
   while (
-    getResult.status === SorobanRpc.Api.GetTransactionStatus.NOT_FOUND &&
+    getResult.status === SorobanApi.GetTransactionStatus.NOT_FOUND &&
     attempts < 30
   ) {
     await new Promise((r) => setTimeout(r, 1000));
@@ -77,10 +71,10 @@ async function invokeContract(
     attempts++;
   }
 
-  if (getResult.status === SorobanRpc.Api.GetTransactionStatus.SUCCESS) {
-    return getResult.returnValue ? scValToNative(getResult.returnValue) : null;
+  if (getResult.status === SorobanApi.GetTransactionStatus.SUCCESS) {
+    const success = getResult as SorobanApi.GetSuccessfulTransactionResponse;
+    return success.returnValue ? scValToNative(success.returnValue) : null;
   }
-
   throw new Error(`Transaction ${getResult.status}`);
 }
 
@@ -88,14 +82,17 @@ async function readContract(method: string, args: xdr.ScVal[] = []) {
   const server = getRpcServer();
   const contract = new Contract(CONTRACT_ID);
 
-  // Use a dummy account for read-only calls
-  const dummyAccount = {
-    accountId: () => "GAAZI4TCR3TY5OJHCTJC2A4QSY6CJWJH5IAJTGKIN2ER7LBNVKOCCWN",
-    sequenceNumber: () => "0",
-    incrementSequenceNumber: () => {},
-  };
+  // Use a fixed dummy account for read-only simulation
+  const dummyKey = "GAAZI4TCR3TY5OJHCTJC2A4QSY6CJWJH5IAJTGKIN2ER7LBNVKOCCWN";
+  let account;
+  try {
+    account = await server.getAccount(dummyKey);
+  } catch {
+    // If dummy account doesn't exist on testnet, create minimal object
+    account = { accountId: () => dummyKey, sequenceNumber: () => "0", incrementSequenceNumber: () => {} };
+  }
 
-  const tx = new TransactionBuilder(dummyAccount as never, {
+  const tx = new TransactionBuilder(account as never, {
     fee: BASE_FEE,
     networkPassphrase: Networks.TESTNET,
   })
@@ -104,18 +101,18 @@ async function readContract(method: string, args: xdr.ScVal[] = []) {
     .build();
 
   const sim = await server.simulateTransaction(tx);
-  if (SorobanRpc.Api.isSimulationError(sim)) {
-    throw new Error(`Simulation failed: ${sim.error}`);
+  if (SorobanApi.isSimulationError(sim)) {
+    throw new Error(`Read failed: ${(sim as SorobanApi.SimulateTransactionErrorResponse).error}`);
   }
 
-  const simSuccess = sim as SorobanRpc.Api.SimulateTransactionSuccessResponse;
+  const simSuccess = sim as SorobanApi.SimulateTransactionSuccessResponse;
   if (simSuccess.result?.retval) {
     return scValToNative(simSuccess.result.retval);
   }
   return null;
 }
 
-// ─── Contract Functions ───────────────────────────────────────────────────── //
+// ─── Exported Contract Functions ─────────────────────────────────────────── //
 export async function getGroupInfo() {
   return readContract("get_group_info");
 }
@@ -133,26 +130,20 @@ export async function getTreasuryBalance() {
 }
 
 export async function isMember(address: string) {
-  return readContract("is_member", [
-    nativeToScVal(new Address(address).toBuffer(), { type: "address" }),
-  ]);
+  return readContract("is_member", [new Address(address).toScVal()]);
 }
 
 export async function joinGroup(caller: string) {
-  return invokeContract(caller, "join_group", [
-    nativeToScVal(new Address(caller).toBuffer(), { type: "address" }),
-  ]);
+  return invokeContract(caller, "join_group", [new Address(caller).toScVal()]);
 }
 
 export async function leaveGroup(caller: string) {
-  return invokeContract(caller, "leave_group", [
-    nativeToScVal(new Address(caller).toBuffer(), { type: "address" }),
-  ]);
+  return invokeContract(caller, "leave_group", [new Address(caller).toScVal()]);
 }
 
 export async function deposit(caller: string, amount: bigint) {
   return invokeContract(caller, "deposit", [
-    nativeToScVal(new Address(caller).toBuffer(), { type: "address" }),
+    new Address(caller).toScVal(),
     nativeToScVal(amount, { type: "i128" }),
   ]);
 }
@@ -164,7 +155,7 @@ export async function createExpense(
   category: number
 ) {
   return invokeContract(caller, "create_expense", [
-    nativeToScVal(new Address(caller).toBuffer(), { type: "address" }),
+    new Address(caller).toScVal(),
     nativeToScVal(description, { type: "string" }),
     nativeToScVal(amount, { type: "i128" }),
     nativeToScVal(category, { type: "u32" }),
@@ -173,14 +164,14 @@ export async function createExpense(
 
 export async function approveExpense(caller: string, expenseId: number) {
   return invokeContract(caller, "approve_expense", [
-    nativeToScVal(new Address(caller).toBuffer(), { type: "address" }),
+    new Address(caller).toScVal(),
     nativeToScVal(expenseId, { type: "u32" }),
   ]);
 }
 
 export async function rejectExpense(caller: string, expenseId: number) {
   return invokeContract(caller, "reject_expense", [
-    nativeToScVal(new Address(caller).toBuffer(), { type: "address" }),
+    new Address(caller).toScVal(),
     nativeToScVal(expenseId, { type: "u32" }),
   ]);
 }
