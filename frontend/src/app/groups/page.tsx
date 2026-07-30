@@ -6,6 +6,9 @@ import { useFreighter } from "@/context/FreighterContext";
 import { getGroupInfo, isMember, joinGroup } from "@/lib/soroban";
 import { FreighterButton } from "@/components/wallet/FreighterButton";
 
+// Hardcoded contract ID — always available
+const CONTRACT_ID = "CAD76KKGZVVDXZVYDH2QCQ5SSLZQGNFZXJYXZXOWTIJWVJVO6ZFBV5X2";
+
 interface GroupInfo {
   name: string;
   description: string;
@@ -14,8 +17,6 @@ interface GroupInfo {
   treasury_balance: bigint;
   admin: string;
 }
-
-const CONTRACT_ID = process.env.NEXT_PUBLIC_CONTRACT_ID || "CAD76KKGZVVDXZVYDH2QCQ5SSLZQGNFZXJYXZXOWTIJWVJVO6ZFBV5X2";
 
 export default function GroupsPage() {
   const { address, isConnected } = useFreighter();
@@ -67,12 +68,12 @@ export default function GroupsPage() {
       <div className="flex items-center justify-between mb-8">
         <div>
           <h1 className="text-2xl font-bold text-white">Groups</h1>
-          <p className="text-sm text-gray-400 mt-0.5">Community expense groups on Stellar</p>
+          <p className="text-sm text-gray-400 mt-0.5">Community expense group on Stellar</p>
         </div>
-        {isConnected && (
-          <Link href="/groups/create"
+        {isConnected && memberStatus && (
+          <Link href={`/groups/${CONTRACT_ID}`}
             className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-sm font-medium rounded-xl transition-colors">
-            + Create Group
+            Open Group →
           </Link>
         )}
       </div>
@@ -90,14 +91,6 @@ export default function GroupsPage() {
 
       {loading ? (
         <div className="bg-gray-900 rounded-2xl border border-gray-800 p-8 animate-pulse h-48" />
-      ) : !CONTRACT_ID ? (
-        <div className="bg-gray-900 rounded-2xl border border-yellow-800 p-8 text-center">
-          <p className="text-yellow-400 mb-2">⚠ No contract deployed yet</p>
-          <p className="text-gray-400 text-sm">Deploy the Soroban contract first and set NEXT_PUBLIC_CONTRACT_ID</p>
-          <Link href="/groups/create" className="mt-4 inline-block text-purple-400 underline text-sm">
-            Deploy & Initialize →
-          </Link>
-        </div>
       ) : info ? (
         <div className="bg-gray-900 rounded-2xl border border-gray-800 p-6">
           <div className="flex items-start justify-between mb-4">
@@ -106,7 +99,12 @@ export default function GroupsPage() {
                 {info.name?.charAt(0) ?? "G"}
               </div>
               <h2 className="text-xl font-bold text-white">{info.name}</h2>
-              {info.description && <p className="text-gray-400 text-sm mt-1">{info.description}</p>}
+              {info.description && (
+                <p className="text-gray-400 text-sm mt-1">{info.description}</p>
+              )}
+              <p className="text-xs text-gray-600 mt-1 font-mono">
+                {CONTRACT_ID.slice(0, 16)}...{CONTRACT_ID.slice(-8)}
+              </p>
             </div>
             <div className="text-right">
               {memberStatus ? (
@@ -140,15 +138,17 @@ export default function GroupsPage() {
           {memberStatus && (
             <div className="mt-4 pt-4 border-t border-gray-800">
               <Link href={`/groups/${CONTRACT_ID}`}
-                className="w-full flex items-center justify-center gap-2 py-2.5 bg-gray-800 hover:bg-gray-700 text-white text-sm rounded-xl transition-colors">
-                Open Group →
+                className="w-full flex items-center justify-center gap-2 py-2.5 bg-purple-600 hover:bg-purple-700 text-white text-sm rounded-xl transition-colors">
+                Open Group & Manage Expenses →
               </Link>
             </div>
           )}
         </div>
       ) : (
-        <div className="bg-gray-900 rounded-2xl border border-gray-800 p-8 text-center text-gray-400">
-          No groups found
+        <div className="bg-gray-900 rounded-2xl border border-gray-800 p-8 text-center">
+          <p className="text-4xl mb-3">🌟</p>
+          <p className="text-white font-semibold mb-1">Loading group data...</p>
+          <p className="text-gray-400 text-sm">Connecting to Stellar Testnet RPC</p>
         </div>
       )}
     </div>

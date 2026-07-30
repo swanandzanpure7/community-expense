@@ -3,75 +3,58 @@
 import React from "react";
 import Link from "next/link";
 
+const CONTRACT_ID = "CAD76KKGZVVDXZVYDH2QCQ5SSLZQGNFZXJYXZXOWTIJWVJVO6ZFBV5X2";
+
 export default function CreateGroupPage() {
   return (
     <div className="max-w-lg mx-auto px-4 py-10">
       <Link href="/groups" className="text-sm text-purple-400 hover:underline mb-4 inline-block">
         ← Back to Groups
       </Link>
-      <h1 className="text-2xl font-bold text-white mb-2">Initialize Group Contract</h1>
+      <h1 className="text-2xl font-bold text-white mb-2">Group Contract</h1>
       <p className="text-gray-400 text-sm mb-6">
-        The Soroban contract is deployed once via the CLI. Use the instructions below.
+        The community expense group contract is already deployed and initialized on Stellar Testnet.
       </p>
 
       <div className="bg-gray-900 rounded-2xl border border-gray-800 p-6 space-y-4">
-        <div className="bg-yellow-900/20 border border-yellow-800 rounded-xl p-4 text-sm text-yellow-400">
-          ⚠ Contract deployment requires the Stellar CLI. Run these commands in your terminal.
+        {/* Contract info */}
+        <div className="bg-green-900/20 border border-green-800 rounded-xl p-4">
+          <p className="text-green-400 font-semibold text-sm mb-1">✅ Contract Deployed & Active</p>
+          <p className="text-xs text-gray-400 font-mono break-all">{CONTRACT_ID}</p>
         </div>
 
         <div className="space-y-3 text-sm">
-          <div>
-            <p className="text-gray-400 mb-1">1. Configure testnet identity</p>
-            <pre className="bg-gray-950 border border-gray-800 rounded-lg p-3 text-purple-300 text-xs overflow-x-auto">
-{`stellar keys generate --global alice --network testnet
-stellar keys fund alice --network testnet`}
-            </pre>
+          <div className="flex justify-between py-2 border-b border-gray-800">
+            <span className="text-gray-400">Network</span>
+            <span className="text-white">Stellar Testnet</span>
           </div>
-
-          <div>
-            <p className="text-gray-400 mb-1">2. Build contract</p>
-            <pre className="bg-gray-950 border border-gray-800 rounded-lg p-3 text-purple-300 text-xs overflow-x-auto">
-{`stellar contract build`}
-            </pre>
+          <div className="flex justify-between py-2 border-b border-gray-800">
+            <span className="text-gray-400">Group Name</span>
+            <span className="text-white">Community Expense Group</span>
           </div>
-
-          <div>
-            <p className="text-gray-400 mb-1">3. Deploy to testnet</p>
-            <pre className="bg-gray-950 border border-gray-800 rounded-lg p-3 text-purple-300 text-xs overflow-x-auto">
-{`stellar contract deploy \\
-  --wasm target/wasm32-unknown-unknown/release/expense_group.wasm \\
-  --source alice \\
-  --network testnet`}
-            </pre>
+          <div className="flex justify-between py-2 border-b border-gray-800">
+            <span className="text-gray-400">Approval Threshold</span>
+            <span className="text-white">51%</span>
           </div>
-
-          <div>
-            <p className="text-gray-400 mb-1">4. Initialize the contract</p>
-            <pre className="bg-gray-950 border border-gray-800 rounded-lg p-3 text-purple-300 text-xs overflow-x-auto">
-{`stellar contract invoke \\
-  --id <CONTRACT_ID> \\
-  --source alice \\
-  --network testnet \\
-  -- initialize \\
-  --admin <YOUR_ADDRESS> \\
-  --name "My Group" \\
-  --description "Shared expenses" \\
-  --approval_threshold 51`}
-            </pre>
-          </div>
-
-          <div>
-            <p className="text-gray-400 mb-1">5. Add to frontend .env.local</p>
-            <pre className="bg-gray-950 border border-gray-800 rounded-lg p-3 text-purple-300 text-xs overflow-x-auto">
-{`NEXT_PUBLIC_CONTRACT_ID=C...your_contract_id...`}
-            </pre>
+          <div className="flex justify-between py-2 border-b border-gray-800">
+            <span className="text-gray-400">Status</span>
+            <span className="text-green-400">Active</span>
           </div>
         </div>
 
-        <p className="text-xs text-gray-500 pt-2">
-          See the full deployment guide in{" "}
-          <code className="text-purple-400">docs/DEPLOYMENT.md</code>
-        </p>
+        <Link href="/groups"
+          className="w-full flex items-center justify-center gap-2 py-3 bg-purple-600 hover:bg-purple-700 text-white text-sm font-medium rounded-xl transition-colors">
+          Go to Group →
+        </Link>
+
+        <a
+          href={`https://stellar.expert/explorer/testnet/contract/${CONTRACT_ID}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="w-full flex items-center justify-center gap-2 py-2.5 border border-gray-700 text-gray-400 hover:text-white text-sm rounded-xl transition-colors"
+        >
+          View on Stellar Explorer ↗
+        </a>
       </div>
     </div>
   );
