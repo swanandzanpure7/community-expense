@@ -116,7 +116,7 @@ export const STELLAR_NETWORKS = {
   TESTNET: {
     name: "TESTNET",
     passphrase: "Test SDF Network ; September 2015",
-    rpcUrl: "https://soroban-testnet.stellar.org",
+    rpcUrl: "https://soroban-testnet.stellar.org:443",
     horizonUrl: "https://horizon-testnet.stellar.org",
   },
   MAINNET: {

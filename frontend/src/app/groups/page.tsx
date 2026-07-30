@@ -68,7 +68,7 @@ export default function GroupsPage() {
       <div className="flex items-center justify-between mb-8">
         <div>
           <h1 className="text-2xl font-bold text-white">Groups</h1>
-          <p className="text-sm text-gray-400 mt-0.5">Community expense group on Stellar</p>
+          <p className="text-sm text-gray-400 mt-0.5">Community expense group on Stellar · v9</p>
         </div>
         {isConnected && memberStatus && (
           <Link href={`/groups/${CONTRACT_ID}`}

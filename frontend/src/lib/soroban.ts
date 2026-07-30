@@ -9,6 +9,7 @@ import {
   Address,
   nativeToScVal,
   scValToNative,
+  Keypair,
 } from "@stellar/stellar-sdk";
 import {
   Server as SorobanServer,
@@ -17,17 +18,68 @@ import {
 } from "@stellar/stellar-sdk/rpc";
 import { signStellarTransaction, STELLAR_NETWORKS } from "./freighter";
 
-// Contract ID — hardcoded as fallback since NEXT_PUBLIC_ vars are baked at build time
-const CONTRACT_ID =
-  process.env.NEXT_PUBLIC_CONTRACT_ID ||
-  "CAD76KKGZVVDXZVYDH2QCQ5SSLZQGNFZXJYXZXOWTIJWVJVO6ZFBV5X2";
-
+const CONTRACT_ID = "CAD76KKGZVVDXZVYDH2QCQ5SSLZQGNFZXJYXZXOWTIJWVJVO6ZFBV5X2";
 const NETWORK = STELLAR_NETWORKS.TESTNET;
 
 function getRpcServer() {
-  return new SorobanServer(NETWORK.rpcUrl);
+  // Use our Next.js API proxy to avoid CORS issues in production
+  const rpcUrl = typeof window !== "undefined"
+    ? `${window.location.origin}/api/soroban`
+    : NETWORK.rpcUrl;
+  return new SorobanServer(rpcUrl);
 }
 
+// ── Read-only simulation (no signing required) ─────────────────────────── //
+async function readContract(method: string, args: xdr.ScVal[] = []) {
+  const server = getRpcServer();
+  const contract = new Contract(CONTRACT_ID);
+
+  // Generate a random keypair just for simulation — no funding needed
+  const simKeypair = Keypair.random();
+
+  const tx = new TransactionBuilder(
+    {
+      accountId: () => simKeypair.publicKey(),
+      sequenceNumber: () => "0",
+      incrementSequenceNumber: () => {},
+    } as never,
+    {
+      fee: BASE_FEE,
+      networkPassphrase: Networks.TESTNET,
+    }
+  )
+    .addOperation(contract.call(method, ...args))
+    .setTimeout(30)
+    .build();
+
+  try {
+    const sim = await server.simulateTransaction(tx);
+
+    if (SorobanApi.isSimulationError(sim)) {
+      const errSim = sim as SorobanApi.SimulateTransactionErrorResponse;
+      throw new Error(`Contract call failed: ${errSim.error}`);
+    }
+
+    const simSuccess = sim as SorobanApi.SimulateTransactionSuccessResponse;
+    if (simSuccess.result?.retval) {
+      return scValToNative(simSuccess.result.retval);
+    }
+    return null;
+  } catch (e) {
+    const msg = (e as Error).message || String(e);
+    // Ignore "account not found" — simulation still works
+    if (msg.includes("account") && msg.includes("not found")) {
+      // Retry with the raw error ignored
+      const sim2 = await server.simulateTransaction(tx);
+      const s2 = sim2 as SorobanApi.SimulateTransactionSuccessResponse;
+      if (s2.result?.retval) return scValToNative(s2.result.retval);
+      return null;
+    }
+    throw e;
+  }
+}
+
+// ── Write (requires Freighter signing) ────────────────────────────────── //
 async function invokeContract(
   caller: string,
   method: string,
@@ -76,44 +128,13 @@ async function invokeContract(
   }
 
   if (getResult.status === SorobanApi.GetTransactionStatus.SUCCESS) {
-    const success = getResult as SorobanApi.GetSuccessfulTransactionResponse;
-    return success.returnValue ? scValToNative(success.returnValue) : null;
+    const s = getResult as SorobanApi.GetSuccessfulTransactionResponse;
+    return s.returnValue ? scValToNative(s.returnValue) : null;
   }
   throw new Error(`Transaction ${getResult.status}`);
 }
 
-async function readContract(method: string, args: xdr.ScVal[] = []) {
-  const server = getRpcServer();
-  const contract = new Contract(CONTRACT_ID);
-
-  const dummyKey = "GAAZI4TCR3TY5OJHCTJC2A4QSY6CJWJH5IAJTGKIN2ER7LBNVKOCCWN";
-  let account;
-  try {
-    account = await server.getAccount(dummyKey);
-  } catch {
-    account = { accountId: () => dummyKey, sequenceNumber: () => "0", incrementSequenceNumber: () => {} };
-  }
-
-  const tx = new TransactionBuilder(account as never, {
-    fee: BASE_FEE,
-    networkPassphrase: Networks.TESTNET,
-  })
-    .addOperation(contract.call(method, ...args))
-    .setTimeout(30)
-    .build();
-
-  const sim = await server.simulateTransaction(tx);
-  if (SorobanApi.isSimulationError(sim)) {
-    throw new Error(`Read failed: ${(sim as SorobanApi.SimulateTransactionErrorResponse).error}`);
-  }
-
-  const simSuccess = sim as SorobanApi.SimulateTransactionSuccessResponse;
-  if (simSuccess.result?.retval) {
-    return scValToNative(simSuccess.result.retval);
-  }
-  return null;
-}
-
+// ─── Exports ──────────────────────────────────────────────────────────── //
 export async function getGroupInfo() { return readContract("get_group_info"); }
 export async function getMembers() { return readContract("get_members"); }
 export async function getAllExpenses() { return readContract("get_all_expenses"); }
@@ -133,7 +154,12 @@ export async function deposit(caller: string, amount: bigint) {
     nativeToScVal(amount, { type: "i128" }),
   ]);
 }
-export async function createExpense(caller: string, description: string, amount: bigint, category: number) {
+export async function createExpense(
+  caller: string,
+  description: string,
+  amount: bigint,
+  category: number
+) {
   return invokeContract(caller, "create_expense", [
     new Address(caller).toScVal(),
     nativeToScVal(description, { type: "string" }),
