@@ -9,7 +9,6 @@ import {
   Address,
   nativeToScVal,
   scValToNative,
-  Keypair,
 } from "@stellar/stellar-sdk";
 import {
   Server as SorobanServer,
@@ -29,54 +28,46 @@ function getRpcServer() {
   return new SorobanServer(rpcUrl);
 }
 
-// ── Read-only simulation (no signing required) ─────────────────────────── //
+// ── Read-only simulation ──────────────────────────────────────────────── //
 async function readContract(method: string, args: xdr.ScVal[] = []) {
   const server = getRpcServer();
   const contract = new Contract(CONTRACT_ID);
 
-  // Generate a random keypair just for simulation — no funding needed
-  const simKeypair = Keypair.random();
+  // Use a valid Stellar testnet account that exists — Stellar Laboratory's test account
+  const FUNDED_DUMMY = "GAAZI4TCR3TY5OJHCTJC2A4QSY6CJWJH5IAJTGKIN2ER7LBNVKOCCWN";
 
-  const tx = new TransactionBuilder(
-    {
-      accountId: () => simKeypair.publicKey(),
-      sequenceNumber: () => "0",
+  let account;
+  try {
+    account = await server.getAccount(FUNDED_DUMMY);
+  } catch {
+    // If that account is gone, use sequence 0 manually
+    account = {
+      accountId: () => FUNDED_DUMMY,
+      sequenceNumber: () => "100",
       incrementSequenceNumber: () => {},
-    } as never,
-    {
-      fee: BASE_FEE,
-      networkPassphrase: Networks.TESTNET,
-    }
-  )
+    };
+  }
+
+  const tx = new TransactionBuilder(account as never, {
+    fee: BASE_FEE,
+    networkPassphrase: Networks.TESTNET,
+  })
     .addOperation(contract.call(method, ...args))
     .setTimeout(30)
     .build();
 
-  try {
-    const sim = await server.simulateTransaction(tx);
+  const sim = await server.simulateTransaction(tx);
 
-    if (SorobanApi.isSimulationError(sim)) {
-      const errSim = sim as SorobanApi.SimulateTransactionErrorResponse;
-      throw new Error(`Contract call failed: ${errSim.error}`);
-    }
-
-    const simSuccess = sim as SorobanApi.SimulateTransactionSuccessResponse;
-    if (simSuccess.result?.retval) {
-      return scValToNative(simSuccess.result.retval);
-    }
-    return null;
-  } catch (e) {
-    const msg = (e as Error).message || String(e);
-    // Ignore "account not found" — simulation still works
-    if (msg.includes("account") && msg.includes("not found")) {
-      // Retry with the raw error ignored
-      const sim2 = await server.simulateTransaction(tx);
-      const s2 = sim2 as SorobanApi.SimulateTransactionSuccessResponse;
-      if (s2.result?.retval) return scValToNative(s2.result.retval);
-      return null;
-    }
-    throw e;
+  if (SorobanApi.isSimulationError(sim)) {
+    const errSim = sim as SorobanApi.SimulateTransactionErrorResponse;
+    throw new Error(errSim.error);
   }
+
+  const simSuccess = sim as SorobanApi.SimulateTransactionSuccessResponse;
+  if (simSuccess.result?.retval) {
+    return scValToNative(simSuccess.result.retval);
+  }
+  return null;
 }
 
 // ── Write (requires Freighter signing) ────────────────────────────────── //
