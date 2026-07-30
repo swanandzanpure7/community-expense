@@ -1,13 +1,13 @@
 "use client";
 
 import React, { createContext, useContext, useEffect, useState, useCallback } from "react";
-import {
-  connectFreighter,
-  checkFreighterInstalled,
-  getFreighterAddress,
-  getFreighterNetwork,
-  STELLAR_NETWORKS,
-} from "@/lib/freighter";
+import { STELLAR_NETWORKS } from "@/lib/freighter";
+
+// Dynamic import to avoid SSR issues
+async function getFreighterApi() {
+  const mod = await import("@stellar/freighter-api");
+  return mod;
+}
 
 interface FreighterState {
   address: string;
@@ -34,36 +34,71 @@ export function FreighterProvider({ children }: { children: React.ReactNode }) {
   const isWrongNetwork =
     isConnected &&
     network !== STELLAR_NETWORKS.TESTNET.name &&
-    network !== "TESTNET";
+    network !== "TESTNET" &&
+    network !== "Test SDF Network ; September 2015";
 
-  // Check if already connected on mount
   useEffect(() => {
-    async function init() {
-      const installed = await checkFreighterInstalled();
-      setIsInstalled(installed);
-      if (installed) {
-        const addr = await getFreighterAddress();
-        const net = await getFreighterNetwork();
-        if (addr) {
-          setAddress(addr);
-          setNetwork(net);
+    // Check if already connected on mount
+    const init = async () => {
+      try {
+        const api = await getFreighterApi();
+        const connResult = await api.isConnected();
+        setIsInstalled(connResult.isConnected);
+
+        if (connResult.isConnected) {
+          const addrResult = await api.getAddress();
+          const netResult = await api.getNetwork();
+          if (addrResult.address) {
+            setAddress(addrResult.address);
+            setNetwork(netResult.network || "");
+          }
         }
+      } catch {
+        // Freighter not installed — button still shows
       }
-    }
+    };
     init();
   }, []);
 
   const connect = useCallback(async () => {
     setIsConnecting(true);
     setError(null);
-    const result = await connectFreighter();
-    if (result.error) {
-      setError(result.error);
-    } else {
-      setAddress(result.address);
-      setNetwork(result.network);
+    try {
+      const api = await getFreighterApi();
+
+      // Check if installed
+      const connResult = await api.isConnected();
+      if (!connResult.isConnected) {
+        setError("Freighter not installed. Please install from https://freighter.app");
+        setIsConnecting(false);
+        return;
+      }
+
+      // Request access
+      const accessResult = await api.requestAccess();
+      if (accessResult.error) {
+        setError(accessResult.error);
+        setIsConnecting(false);
+        return;
+      }
+
+      const [addrResult, netResult] = await Promise.all([
+        api.getAddress(),
+        api.getNetwork(),
+      ]);
+
+      if (addrResult.error) {
+        setError(addrResult.error);
+      } else {
+        setAddress(addrResult.address);
+        setNetwork(netResult.network || "");
+        setIsInstalled(true);
+      }
+    } catch (err) {
+      setError((err as Error).message || "Failed to connect Freighter");
+    } finally {
+      setIsConnecting(false);
     }
-    setIsConnecting(false);
   }, []);
 
   const disconnect = useCallback(() => {
