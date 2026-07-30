@@ -38,7 +38,7 @@ async function rpcCall(method: string, params: Record<string, unknown>) {
 function buildSimTx(method: string, args: xdr.ScVal[]): string {
   const contract = new Contract(CONTRACT_ID);
   const account = new Account(
-    "GAAZI4TCR3TY5OJHCTJC2A4QSY6CJWJH5IAJTGKIN2ER7LBNVKOCCWN",
+    "GBZQGAKTDD2CC7SAXXPLR457US5XYAQORNIWW7L4YEV5AUTOQLK25YLU",
     "100"
   );
   const tx = new TransactionBuilder(account, {
