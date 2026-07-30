@@ -20,54 +20,63 @@ import { signStellarTransaction, STELLAR_NETWORKS } from "./freighter";
 
 const CONTRACT_ID = "CAD76KKGZVVDXZVYDH2QCQ5SSLZQGNFZXJYXZXOWTIJWVJVO6ZFBV5X2";
 const NETWORK = STELLAR_NETWORKS.TESTNET;
+const RPC_URL = NETWORK.rpcUrl;
 
-function getRpcServer() {
-  const rpcUrl = typeof window !== "undefined"
-    ? `${window.location.origin}/api/soroban`
-    : NETWORK.rpcUrl;
-  return new SorobanServer(rpcUrl);
+// ── Direct JSON-RPC call — bypasses stellar-sdk XDR issues ──────────────── //
+async function rpcCall(method: string, params: Record<string, unknown>) {
+  const res = await fetch(RPC_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
+  });
+  const json = await res.json();
+  if (json.error) throw new Error(json.error.message || JSON.stringify(json.error));
+  return json.result;
 }
 
-// ── Read-only simulation — no funded account needed ────────────────────── //
-async function readContract(method: string, args: xdr.ScVal[] = []) {
-  const server = getRpcServer();
+// ── Build simulation tx XDR ───────────────────────────────────────────────── //
+function buildSimTx(method: string, args: xdr.ScVal[]): string {
   const contract = new Contract(CONTRACT_ID);
-
-  // Use Account class with sequence 0 — valid for simulation only
-  const simAccount = new Account(
+  const account = new Account(
     "GAAZI4TCR3TY5OJHCTJC2A4QSY6CJWJH5IAJTGKIN2ER7LBNVKOCCWN",
-    "0"
+    "100"
   );
-
-  const tx = new TransactionBuilder(simAccount, {
+  const tx = new TransactionBuilder(account, {
     fee: BASE_FEE,
     networkPassphrase: Networks.TESTNET,
   })
     .addOperation(contract.call(method, ...args))
     .setTimeout(30)
     .build();
-
-  const sim = await server.simulateTransaction(tx);
-
-  if (SorobanApi.isSimulationError(sim)) {
-    const errSim = sim as SorobanApi.SimulateTransactionErrorResponse;
-    throw new Error(errSim.error);
-  }
-
-  const simSuccess = sim as SorobanApi.SimulateTransactionSuccessResponse;
-  if (simSuccess.result?.retval) {
-    return scValToNative(simSuccess.result.retval);
-  }
-  return null;
+  return tx.toXDR();
 }
 
-// ── Write — requires Freighter signing ───────────────────────────────────── //
+// ── Read contract (simulation) ────────────────────────────────────────────── //
+async function readContract(method: string, args: xdr.ScVal[] = []) {
+  try {
+    const txXdr = buildSimTx(method, args);
+    const result = await rpcCall("simulateTransaction", { transaction: txXdr });
+
+    if (result.error) throw new Error(result.error);
+    if (!result.results || result.results.length === 0) return null;
+
+    const retvalXdr = result.results[0]?.xdr;
+    if (!retvalXdr) return null;
+
+    const scVal = xdr.ScVal.fromXDR(retvalXdr, "base64");
+    return scValToNative(scVal);
+  } catch (e) {
+    throw new Error(`Contract read failed: ${(e as Error).message}`);
+  }
+}
+
+// ── Write contract (requires Freighter) ──────────────────────────────────── //
 async function invokeContract(
   caller: string,
   method: string,
   args: xdr.ScVal[]
 ): Promise<unknown> {
-  const server = getRpcServer();
+  const server = new SorobanServer(RPC_URL);
   const contract = new Contract(CONTRACT_ID);
 
   const account = await server.getAccount(caller);
@@ -116,7 +125,7 @@ async function invokeContract(
   throw new Error(`Transaction ${getResult.status}`);
 }
 
-// ─── Exports ─────────────────────────────────────────────────────────────── //
+// ─── Exported functions ───────────────────────────────────────────────────── //
 export async function getGroupInfo() { return readContract("get_group_info"); }
 export async function getMembers() { return readContract("get_members"); }
 export async function getAllExpenses() { return readContract("get_all_expenses"); }
