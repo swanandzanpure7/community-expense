@@ -17,7 +17,11 @@ import {
 } from "@stellar/stellar-sdk/rpc";
 import { signStellarTransaction, STELLAR_NETWORKS } from "./freighter";
 
-const CONTRACT_ID = process.env.NEXT_PUBLIC_CONTRACT_ID || "";
+// Contract ID — hardcoded as fallback since NEXT_PUBLIC_ vars are baked at build time
+const CONTRACT_ID =
+  process.env.NEXT_PUBLIC_CONTRACT_ID ||
+  "CAD76KKGZVVDXZVYDH2QCQ5SSLZQGNFZXJYXZXOWTIJWVJVO6ZFBV5X2";
+
 const NETWORK = STELLAR_NETWORKS.TESTNET;
 
 function getRpcServer() {
@@ -82,13 +86,11 @@ async function readContract(method: string, args: xdr.ScVal[] = []) {
   const server = getRpcServer();
   const contract = new Contract(CONTRACT_ID);
 
-  // Use a fixed dummy account for read-only simulation
   const dummyKey = "GAAZI4TCR3TY5OJHCTJC2A4QSY6CJWJH5IAJTGKIN2ER7LBNVKOCCWN";
   let account;
   try {
     account = await server.getAccount(dummyKey);
   } catch {
-    // If dummy account doesn't exist on testnet, create minimal object
     account = { accountId: () => dummyKey, sequenceNumber: () => "0", incrementSequenceNumber: () => {} };
   }
 
@@ -112,48 +114,26 @@ async function readContract(method: string, args: xdr.ScVal[] = []) {
   return null;
 }
 
-// ─── Exported Contract Functions ─────────────────────────────────────────── //
-export async function getGroupInfo() {
-  return readContract("get_group_info");
-}
-
-export async function getMembers() {
-  return readContract("get_members");
-}
-
-export async function getAllExpenses() {
-  return readContract("get_all_expenses");
-}
-
-export async function getTreasuryBalance() {
-  return readContract("get_treasury_balance");
-}
-
+export async function getGroupInfo() { return readContract("get_group_info"); }
+export async function getMembers() { return readContract("get_members"); }
+export async function getAllExpenses() { return readContract("get_all_expenses"); }
+export async function getTreasuryBalance() { return readContract("get_treasury_balance"); }
 export async function isMember(address: string) {
   return readContract("is_member", [new Address(address).toScVal()]);
 }
-
 export async function joinGroup(caller: string) {
   return invokeContract(caller, "join_group", [new Address(caller).toScVal()]);
 }
-
 export async function leaveGroup(caller: string) {
   return invokeContract(caller, "leave_group", [new Address(caller).toScVal()]);
 }
-
 export async function deposit(caller: string, amount: bigint) {
   return invokeContract(caller, "deposit", [
     new Address(caller).toScVal(),
     nativeToScVal(amount, { type: "i128" }),
   ]);
 }
-
-export async function createExpense(
-  caller: string,
-  description: string,
-  amount: bigint,
-  category: number
-) {
+export async function createExpense(caller: string, description: string, amount: bigint, category: number) {
   return invokeContract(caller, "create_expense", [
     new Address(caller).toScVal(),
     nativeToScVal(description, { type: "string" }),
@@ -161,14 +141,12 @@ export async function createExpense(
     nativeToScVal(category, { type: "u32" }),
   ]);
 }
-
 export async function approveExpense(caller: string, expenseId: number) {
   return invokeContract(caller, "approve_expense", [
     new Address(caller).toScVal(),
     nativeToScVal(expenseId, { type: "u32" }),
   ]);
 }
-
 export async function rejectExpense(caller: string, expenseId: number) {
   return invokeContract(caller, "reject_expense", [
     new Address(caller).toScVal(),

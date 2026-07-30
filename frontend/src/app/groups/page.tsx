@@ -15,7 +15,7 @@ interface GroupInfo {
   admin: string;
 }
 
-const CONTRACT_ID = process.env.NEXT_PUBLIC_CONTRACT_ID || "";
+const CONTRACT_ID = process.env.NEXT_PUBLIC_CONTRACT_ID || "CAD76KKGZVVDXZVYDH2QCQ5SSLZQGNFZXJYXZXOWTIJWVJVO6ZFBV5X2";
 
 export default function GroupsPage() {
   const { address, isConnected } = useFreighter();

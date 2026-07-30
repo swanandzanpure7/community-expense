@@ -78,7 +78,7 @@ export default function DashboardPage() {
 
       {error && (
         <div className="mb-6 bg-red-900/20 border border-red-800 text-red-400 rounded-xl p-4 text-sm">
-          ⚠ {error} — Make sure the contract is deployed and NEXT_PUBLIC_CONTRACT_ID is set.
+          ⚠ {error}
         </div>
       )}
 
