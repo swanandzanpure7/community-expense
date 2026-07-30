@@ -9,6 +9,7 @@ import {
   Address,
   nativeToScVal,
   scValToNative,
+  Account,
 } from "@stellar/stellar-sdk";
 import {
   Server as SorobanServer,
@@ -21,34 +22,24 @@ const CONTRACT_ID = "CAD76KKGZVVDXZVYDH2QCQ5SSLZQGNFZXJYXZXOWTIJWVJVO6ZFBV5X2";
 const NETWORK = STELLAR_NETWORKS.TESTNET;
 
 function getRpcServer() {
-  // Use our Next.js API proxy to avoid CORS issues in production
   const rpcUrl = typeof window !== "undefined"
     ? `${window.location.origin}/api/soroban`
     : NETWORK.rpcUrl;
   return new SorobanServer(rpcUrl);
 }
 
-// ── Read-only simulation ──────────────────────────────────────────────── //
+// ── Read-only simulation — no funded account needed ────────────────────── //
 async function readContract(method: string, args: xdr.ScVal[] = []) {
   const server = getRpcServer();
   const contract = new Contract(CONTRACT_ID);
 
-  // Use a valid Stellar testnet account that exists — Stellar Laboratory's test account
-  const FUNDED_DUMMY = "GAAZI4TCR3TY5OJHCTJC2A4QSY6CJWJH5IAJTGKIN2ER7LBNVKOCCWN";
+  // Use Account class with sequence 0 — valid for simulation only
+  const simAccount = new Account(
+    "GAAZI4TCR3TY5OJHCTJC2A4QSY6CJWJH5IAJTGKIN2ER7LBNVKOCCWN",
+    "0"
+  );
 
-  let account;
-  try {
-    account = await server.getAccount(FUNDED_DUMMY);
-  } catch {
-    // If that account is gone, use sequence 0 manually
-    account = {
-      accountId: () => FUNDED_DUMMY,
-      sequenceNumber: () => "100",
-      incrementSequenceNumber: () => {},
-    };
-  }
-
-  const tx = new TransactionBuilder(account as never, {
+  const tx = new TransactionBuilder(simAccount, {
     fee: BASE_FEE,
     networkPassphrase: Networks.TESTNET,
   })
@@ -70,7 +61,7 @@ async function readContract(method: string, args: xdr.ScVal[] = []) {
   return null;
 }
 
-// ── Write (requires Freighter signing) ────────────────────────────────── //
+// ── Write — requires Freighter signing ───────────────────────────────────── //
 async function invokeContract(
   caller: string,
   method: string,
@@ -90,7 +81,7 @@ async function invokeContract(
 
   const sim = await server.simulateTransaction(tx);
   if (SorobanApi.isSimulationError(sim)) {
-    throw new Error(`Simulation failed: ${(sim as SorobanApi.SimulateTransactionErrorResponse).error}`);
+    throw new Error((sim as SorobanApi.SimulateTransactionErrorResponse).error);
   }
 
   const preparedTx = assembleTransaction(tx, sim).build();
@@ -125,7 +116,7 @@ async function invokeContract(
   throw new Error(`Transaction ${getResult.status}`);
 }
 
-// ─── Exports ──────────────────────────────────────────────────────────── //
+// ─── Exports ─────────────────────────────────────────────────────────────── //
 export async function getGroupInfo() { return readContract("get_group_info"); }
 export async function getMembers() { return readContract("get_members"); }
 export async function getAllExpenses() { return readContract("get_all_expenses"); }
