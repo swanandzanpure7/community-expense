@@ -1,8 +1,8 @@
 {
-  "name": "expense-soroban-v9",
+  "name": "community-expense-soroban",
   "framework": "nextjs",
   "buildCommand": "npm run build",
-  "installCommand": "npm install",
+  "installCommand": "npm install --legacy-peer-deps",
   "env": {
     "NEXT_PUBLIC_CONTRACT_ID": "CAD76KKGZVVDXZVYDH2QCQ5SSLZQGNFZXJYXZXOWTIJWVJVO6ZFBV5X2",
     "NEXT_PUBLIC_NETWORK": "testnet"
