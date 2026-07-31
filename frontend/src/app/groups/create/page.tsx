@@ -3,7 +3,7 @@
 import React from "react";
 import Link from "next/link";
 
-const CONTRACT_ID = "CAD76KKGZVVDXZVYDH2QCQ5SSLZQGNFZXJYXZXOWTIJWVJVO6ZFBV5X2";
+const CONTRACT_ID = "CAU5N4QWQ2WSNTFLGT5ABPTBU4JKTWSLTBID4NL4TP72P7CQAEEN56CS";
 
 export default function CreateGroupPage() {
   return (
