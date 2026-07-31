@@ -103,7 +103,14 @@ export async function signStellarTransaction(
     if (result.error) {
       return { signedXdr: "", error: result.error };
     }
-    return { signedXdr: result.signedTxXdr };
+    // freighter-api v4 returns signedTxXdr
+    const signed = (result as { signedTxXdr?: string; signedTransaction?: string }).signedTxXdr
+      || (result as { signedTxXdr?: string; signedTransaction?: string }).signedTransaction
+      || (typeof result === "string" ? result : "");
+    if (!signed) {
+      return { signedXdr: "", error: "Freighter did not return a signed XDR" };
+    }
+    return { signedXdr: signed };
   } catch (err) {
     return {
       signedXdr: "",
