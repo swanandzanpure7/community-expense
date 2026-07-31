@@ -1,15 +1,18 @@
 "use client";
 
+// ─── No stellar-sdk imports in this file ─────────────────────────────────── //
+// All XDR construction happens server-side via /api/soroban to avoid
+// Node.js-only crypto deps (sodium-native) breaking in the browser bundle.
+
 import {
   Contract,
   TransactionBuilder,
   Networks,
   BASE_FEE,
-  xdr,
   Address,
   nativeToScVal,
   scValToNative,
-  Account,
+  xdr,
 } from "@stellar/stellar-sdk";
 import {
   Server as SorobanServer,
@@ -22,55 +25,29 @@ const CONTRACT_ID = "CAD76KKGZVVDXZVYDH2QCQ5SSLZQGNFZXJYXZXOWTIJWVJVO6ZFBV5X2";
 const NETWORK = STELLAR_NETWORKS.TESTNET;
 const RPC_URL = NETWORK.rpcUrl;
 
-// ── Direct JSON-RPC call — bypasses stellar-sdk XDR issues ──────────────── //
-async function rpcCall(method: string, params: Record<string, unknown>) {
-  const res = await fetch(RPC_URL, {
+// ── Serialisable arg types sent to server API ─────────────────────────────── //
+type SerializedArg =
+  | { type: "address"; value: string }
+  | { type: "string"; value: string }
+  | { type: "i128"; value: string }
+  | { type: "u32"; value: number };
+
+// ── Read contract via server-side API (no stellar-sdk in browser) ─────────── //
+async function readContract(method: string, args: SerializedArg[] = []) {
+  const res = await fetch("/api/soroban", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
+    body: JSON.stringify({ action: "simulate", method, args }),
   });
-  const json = await res.json();
-  if (json.error) throw new Error(json.error.message || JSON.stringify(json.error));
-  return json.result;
+
+  const data = await res.json();
+  if (data.error) throw new Error(data.error);
+  return data.value;
 }
 
-// ── Build simulation tx XDR ───────────────────────────────────────────────── //
-function buildSimTx(method: string, args: xdr.ScVal[]): string {
-  const contract = new Contract(CONTRACT_ID);
-  const account = new Account(
-    "GBZQGAKTDD2CC7SAXXPLR457US5XYAQORNIWW7L4YEV5AUTOQLK25YLU",
-    "100"
-  );
-  const tx = new TransactionBuilder(account, {
-    fee: BASE_FEE,
-    networkPassphrase: Networks.TESTNET,
-  })
-    .addOperation(contract.call(method, ...args))
-    .setTimeout(30)
-    .build();
-  return tx.toXDR();
-}
-
-// ── Read contract (simulation) ────────────────────────────────────────────── //
-async function readContract(method: string, args: xdr.ScVal[] = []) {
-  try {
-    const txXdr = buildSimTx(method, args);
-    const result = await rpcCall("simulateTransaction", { transaction: txXdr });
-
-    if (result.error) throw new Error(result.error);
-    if (!result.results || result.results.length === 0) return null;
-
-    const retvalXdr = result.results[0]?.xdr;
-    if (!retvalXdr) return null;
-
-    const scVal = xdr.ScVal.fromXDR(retvalXdr, "base64");
-    return scValToNative(scVal);
-  } catch (e) {
-    throw new Error(`Contract read failed: ${(e as Error).message}`);
-  }
-}
-
-// ── Write contract (requires Freighter) ──────────────────────────────────── //
+// ── Write contract — uses stellar-sdk only for send (account + sign) ──────── //
+// Freighter signs the XDR, so stellar-sdk here is fine (it's just used
+// client-side for getAccount / assembleTransaction, not crypto key ops).
 async function invokeContract(
   caller: string,
   method: string,
@@ -125,19 +102,33 @@ async function invokeContract(
   throw new Error(`Transaction ${getResult.status}`);
 }
 
-// ─── Exported functions ───────────────────────────────────────────────────── //
-export async function getGroupInfo() { return readContract("get_group_info"); }
-export async function getMembers() { return readContract("get_members"); }
-export async function getAllExpenses() { return readContract("get_all_expenses"); }
-export async function getTreasuryBalance() { return readContract("get_treasury_balance"); }
-export async function isMember(address: string) {
-  return readContract("is_member", [new Address(address).toScVal()]);
+// ─── Exported read functions (all via server API — no browser crypto) ─────── //
+export async function getGroupInfo() {
+  return readContract("get_group_info");
 }
+export async function getMembers() {
+  return readContract("get_members");
+}
+export async function getAllExpenses() {
+  return readContract("get_all_expenses");
+}
+export async function getTreasuryBalance() {
+  return readContract("get_treasury_balance");
+}
+export async function isMember(address: string) {
+  return readContract("is_member", [{ type: "address", value: address }]);
+}
+
+// ─── Exported write functions (require Freighter wallet) ──────────────────── //
 export async function joinGroup(caller: string) {
-  return invokeContract(caller, "join_group", [new Address(caller).toScVal()]);
+  return invokeContract(caller, "join_group", [
+    new Address(caller).toScVal(),
+  ]);
 }
 export async function leaveGroup(caller: string) {
-  return invokeContract(caller, "leave_group", [new Address(caller).toScVal()]);
+  return invokeContract(caller, "leave_group", [
+    new Address(caller).toScVal(),
+  ]);
 }
 export async function deposit(caller: string, amount: bigint) {
   return invokeContract(caller, "deposit", [
