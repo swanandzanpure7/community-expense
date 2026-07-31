@@ -19,8 +19,13 @@ const DUMMY_SOURCE = "GBZQGAKTDD2CC7SAXXPLR457US5XYAQORNIWW7L4YEV5AUTOQLK25YLU";
 function deserializeArgs(args: Array<{ type: string; value: unknown }>): xdr.ScVal[] {
   return args.map((a) => {
     switch (a.type) {
-      case "address":
-        return new Address(a.value as string).toScVal();
+      case "address": {
+        const addrStr = a.value as string;
+        if (!addrStr || addrStr.length < 56) {
+          throw new Error(`Invalid Stellar address: "${addrStr}"`);
+        }
+        return new Address(addrStr).toScVal();
+      }
       case "string":
         return nativeToScVal(a.value as string, { type: "string" });
       case "i128":

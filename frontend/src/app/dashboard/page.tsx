@@ -24,16 +24,16 @@ export default function DashboardPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!isConnected) { setLoading(false); return; }
     const load = async () => {
       setLoading(true);
+      setError(null);
       try {
-        const [info, memberCheck] = await Promise.all([
-          getGroupInfo(),
-          isMember(address),
-        ]);
+        const info = await getGroupInfo();
         setGroupData(info as GroupData);
-        setMemberStatus(Boolean(memberCheck));
+        if (isConnected && address) {
+          const memberCheck = await isMember(address);
+          setMemberStatus(Boolean(memberCheck));
+        }
       } catch (err) {
         setError((err as Error).message);
       } finally {
