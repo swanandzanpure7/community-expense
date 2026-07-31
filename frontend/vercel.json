@@ -3,7 +3,8 @@
   "buildCommand": "npm run build",
   "installCommand": "npm install --legacy-peer-deps",
   "env": {
-    "NEXT_PUBLIC_CONTRACT_ID": "CAU5N4QWQ2WSNTFLGT5ABPTBU4JKTWSLTBID4NL4TP72P7CQAEEN56CS",
+    "NEXT_PUBLIC_CONTRACT_ID": "CASFQD7PXN2EFVQIIDR6BHN5HXHTM3ANIP7GZA5FTGMVPKZITYZGOLQW",
     "NEXT_PUBLIC_NETWORK": "testnet"
   }
 }
+

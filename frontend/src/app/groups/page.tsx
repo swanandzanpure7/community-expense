@@ -7,7 +7,7 @@ import { getGroupInfo, isMember, joinGroup } from "@/lib/soroban";
 import { FreighterButton } from "@/components/wallet/FreighterButton";
 
 // Hardcoded contract ID — always available
-const CONTRACT_ID = "CAU5N4QWQ2WSNTFLGT5ABPTBU4JKTWSLTBID4NL4TP72P7CQAEEN56CS";
+const CONTRACT_ID = "CASFQD7PXN2EFVQIIDR6BHN5HXHTM3ANIP7GZA5FTGMVPKZITYZGOLQW";
 
 interface GroupInfo {
   name: string;
@@ -154,3 +154,4 @@ export default function GroupsPage() {
     </div>
   );
 }
+
